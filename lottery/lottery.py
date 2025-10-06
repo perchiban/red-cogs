@@ -46,7 +46,7 @@ class Lottery(commands.Cog):
             return
         
         # Calculate end time (using timezone-aware datetime)
-        end_time = datetime.discord.utils.utcnow + timedelta(minutes=duration)
+        end_time = discord.utils.utcnow() + timedelta(minutes=duration)
         end_timestamp = int(end_time.timestamp())
         
         # Create initial embed
@@ -54,7 +54,7 @@ class Lottery(commands.Cog):
             title="🎰 Lottery Registration Open!",
             description=f"{description}\n\nReact with {emoji} below to enter!",
             color=0xF1C40F,
-            timestamp=datetime.discord.utils.utcnow
+            timestamp=discord.utils.utcnow()
         )
         embed.add_field(
             name="📋 How to Enter",
@@ -107,7 +107,7 @@ class Lottery(commands.Cog):
                     title="🎰 Lottery Ended",
                     description="No participants entered the lottery.",
                     color=0xE74C3C,
-                    timestamp=datetime.discord.utils.utcnow
+                    timestamp=discord.utils.utcnow()
                 )
                 embed.set_footer(text="Better luck next time!")
                 await message.edit(embed=embed)
@@ -125,7 +125,7 @@ class Lottery(commands.Cog):
                     title="🎰 Lottery Ended",
                     description="No valid participants entered the lottery.",
                     color=0xE74C3C,
-                    timestamp=datetime.discord.utils.utcnow
+                    timestamp=discord.utils.utcnow()
                 )
                 embed.set_footer(text="Better luck next time!")
                 await message.edit(embed=embed)
@@ -139,7 +139,7 @@ class Lottery(commands.Cog):
                 title="🎊 Lottery Winner Announced!",
                 description=f"**Congratulations to {winner.mention}!**\n\nYou have won the lottery!",
                 color=0x2ECC71,
-                timestamp=datetime.discord.utils.utcnow
+                timestamp=discord.utils.utcnow()
             )
             embed.add_field(
                 name="📊 Total Participants",
