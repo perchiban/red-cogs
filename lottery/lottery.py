@@ -167,5 +167,5 @@ class Lottery(commands.Cog):
         except Exception as e:
             print(f"Error in lottery draw: {e}")
 
-def setup(bot):
-    bot.add_cog(Lottery(bot))
+async def setup(bot):
+    await bot.add_cog(Lottery(bot))
