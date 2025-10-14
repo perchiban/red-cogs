@@ -9,11 +9,17 @@ class DailyJoinsTracker(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.config = Config.get_conf(self, identifier=1234567890, force_registration=True)
+        
+        # Ensure members intent is enabled
+        if not self.bot.intents.members:
+            print("[DailyJoinsTracker] WARNING: Members intent is not enabled!")
+            print("[DailyJoinsTracker] To fix this, add to your bot's config or main file:")
+            print("[DailyJoinsTracker] intents.members = True")
         self.config.register_guild(
             track_channel=None,
             join_count=0,
             last_joiner=None,
-            last_join_message=None,
+            last_join_message=0,
             message_template="{count} people joined today! Latest: {user}",
             timezone="UTC"
         )
@@ -67,6 +73,12 @@ class DailyJoinsTracker(commands.Cog):
         await self.config.guild(ctx.guild).join_count.set(0)
         await self.config.guild(ctx.guild).last_joiner.set(None)
         await ctx.send("✓ Join counter reset")
+    
+    @jointracker.command()
+    async def test(self, ctx):
+        """Test the join tracker with a simulated join"""
+        await self._update_join_message(ctx.guild, ctx.channel, ctx.author)
+        await ctx.send("✓ Test message sent. Check the tracking channel!")
     
     @jointracker.command()
     async def status(self, ctx):
@@ -123,7 +135,7 @@ class DailyJoinsTracker(commands.Cog):
     
     async def _check_and_reset_if_needed(self, guild: discord.Guild, channel: discord.TextChannel, tz):
         """Check if we should reset the counter for a new day"""
-        last_msg_id = await self.config.guild(guild).last_join_message.get()
+        last_msg_id = await self.config.guild(guild).last_join_message()
         
         if not last_msg_id:
             return
