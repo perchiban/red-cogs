@@ -1,6 +1,6 @@
 import discord
 from redbot.core import commands, Config
-from datetime import datetime, timedelta
+from datetime import datetime
 import pytz
 
 class DailyJoinsTracker(commands.Cog):
@@ -10,11 +10,6 @@ class DailyJoinsTracker(commands.Cog):
         self.bot = bot
         self.config = Config.get_conf(self, identifier=1234567890, force_registration=True)
         
-        # Ensure members intent is enabled
-        if not self.bot.intents.members:
-            print("[DailyJoinsTracker] WARNING: Members intent is not enabled!")
-            print("[DailyJoinsTracker] To fix this, add to your bot's config or main file:")
-            print("[DailyJoinsTracker] intents.members = True")
         self.config.register_guild(
             track_channel=None,
             join_count=0,
@@ -23,6 +18,12 @@ class DailyJoinsTracker(commands.Cog):
             message_template="{count} people joined today! Latest: {user}",
             timezone="UTC"
         )
+        
+        # Ensure members intent is enabled
+        if not self.bot.intents.members:
+            print("[DailyJoinsTracker] WARNING: Members intent is not enabled!")
+            print("[DailyJoinsTracker] To fix this, add to your bot's config or main file:")
+            print("[DailyJoinsTracker] intents.members = True")
     
     @commands.group()
     @commands.admin_or_permissions(manage_guild=True)
@@ -44,7 +45,7 @@ class DailyJoinsTracker(commands.Cog):
         Available placeholders:
         - {count}: Number of joins today
         - {user}: Mention of latest joiner
-        - {user.name}: Latest joiner's name
+        - {user_name}: Latest joiner's name
         - {date}: Today's date
         
         Example: "{count} joins today! Welcome {user}! 🎉"
@@ -83,17 +84,16 @@ class DailyJoinsTracker(commands.Cog):
     @jointracker.command()
     async def status(self, ctx):
         """Show current join tracker status"""
-        settings = await self.config.guild(ctx.guild).all()
-        channel_id = settings["track_channel"]
+        channel_id = await self.config.guild(ctx.guild).track_channel()
         
         if not channel_id:
             await ctx.send("❌ No tracking channel set. Use `jointracker setchannel` first.")
             return
         
         channel = ctx.guild.get_channel(channel_id)
-        template = settings["message_template"]
-        timezone = settings["timezone"]
-        count = settings["join_count"]
+        template = await self.config.guild(ctx.guild).message_template()
+        timezone = await self.config.guild(ctx.guild).timezone()
+        count = await self.config.guild(ctx.guild).join_count()
         
         embed = discord.Embed(title="Join Tracker Status", color=discord.Color.blue())
         embed.add_field(name="Channel", value=channel.mention if channel else "❌ Channel not found", inline=False)
@@ -107,25 +107,25 @@ class DailyJoinsTracker(commands.Cog):
         """Track member joins"""
         guild = member.guild
         
-        settings = await self.config.guild(guild).all()
-        channel_id = settings["track_channel"]
+        channel_id = await self.config.guild(guild).track_channel()
         
         if not channel_id:
+            print(f"[DailyJoinsTracker] {member} joined but no tracking channel set in {guild}")
             return
         
         channel = guild.get_channel(channel_id)
         if not channel:
+            print(f"[DailyJoinsTracker] Tracking channel not found in {guild}")
             return
         
-        # Check if we need to reset (new day)
-        tz = pytz.timezone(settings["timezone"])
-        now = datetime.now(tz)
+        print(f"[DailyJoinsTracker] {member} joined {guild}, updating tracker...")
         
-        # Try to get the last message to check its date
+        # Check if we need to reset (new day)
+        tz = pytz.timezone(await self.config.guild(guild).timezone())
         await self._check_and_reset_if_needed(guild, channel, tz)
         
         # Increment counter and update joiner
-        join_count = await self.config.guild(guild).join_count.get()
+        join_count = await self.config.guild(guild).join_count()
         join_count += 1
         await self.config.guild(guild).join_count.set(join_count)
         await self.config.guild(guild).last_joiner.set(member.id)
@@ -149,30 +149,36 @@ class DailyJoinsTracker(commands.Cog):
                 # New day, reset counter
                 await self.config.guild(guild).join_count.set(0)
                 await self.config.guild(guild).last_joiner.set(None)
+                print(f"[DailyJoinsTracker] New day detected in {guild}, counter reset")
         except (discord.NotFound, discord.Forbidden):
             # Message was deleted or no permission
             pass
     
     async def _update_join_message(self, guild: discord.Guild, channel: discord.TextChannel, member: discord.Member):
         """Update or create the join count message"""
-        settings = await self.config.guild(guild).all()
-        template = settings["message_template"]
-        count = settings["join_count"]
+        template = await self.config.guild(guild).message_template()
+        count = await self.config.guild(guild).join_count()
         
         # Format the message
-        message_text = template.format(
-            count=count,
-            user=member.mention,
-            **{"user.name": member.name, "date": datetime.now().strftime("%Y-%m-%d")}
-        )
+        try:
+            message_text = template.format(
+                count=count,
+                user=member.mention,
+                user_name=member.name,
+                date=datetime.now().strftime("%Y-%m-%d")
+            )
+        except KeyError as e:
+            print(f"[DailyJoinsTracker] Invalid placeholder in template: {e}")
+            message_text = f"{count} people joined today! Latest: {member.mention}"
         
-        last_msg_id = settings["last_join_message"]
+        last_msg_id = await self.config.guild(guild).last_join_message()
         
         try:
             if last_msg_id:
                 try:
                     last_msg = await channel.fetch_message(last_msg_id)
                     await last_msg.edit(content=message_text)
+                    print(f"[DailyJoinsTracker] Updated message in {channel}")
                     return
                 except (discord.NotFound, discord.Forbidden):
                     pass
@@ -180,8 +186,9 @@ class DailyJoinsTracker(commands.Cog):
             # Create new message if old one doesn't exist
             new_msg = await channel.send(message_text)
             await self.config.guild(guild).last_join_message.set(new_msg.id)
+            print(f"[DailyJoinsTracker] Created new message in {channel}")
         except discord.Forbidden:
-            print(f"No permission to post in {channel} in {guild}")
+            print(f"[DailyJoinsTracker] No permission to post in {channel} in {guild}")
 
 async def setup(bot):
     await bot.add_cog(DailyJoinsTracker(bot))
