@@ -1,1 +1,1 @@
-from .lottery import setup
+from .jointracker import setup
