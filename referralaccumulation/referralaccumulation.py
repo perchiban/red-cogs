@@ -4,7 +4,7 @@ from redbot.core.utils.chat_formatting import box, humanize_list
 from typing import Optional
 from datetime import datetime
 
-class ReferralSystem(commands.Cog):
+class ReferralAccumulation(commands.Cog):
     """A referral system that tracks member invites and awards points."""
     
     def __init__(self, bot):
@@ -278,4 +278,4 @@ class ReferralSystem(commands.Cog):
         await ctx.send(embed=embed)
 
 def setup(bot):
-    bot.add_cog(ReferralSystem(bot))
+    bot.add_cog(ReferralAccumulation(bot))
