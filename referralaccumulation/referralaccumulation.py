@@ -277,5 +277,5 @@ class ReferralAccumulation(commands.Cog):
         
         await ctx.send(embed=embed)
 
-def setup(bot):
-    bot.add_cog(ReferralAccumulation(bot))
+async setup(bot):
+    await bot.add_cog(ReferralAccumulation(bot))
