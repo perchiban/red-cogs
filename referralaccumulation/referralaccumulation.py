@@ -4,7 +4,7 @@ from redbot.core.utils.chat_formatting import box, humanize_list
 from typing import Optional
 from datetime import datetime
 
-class ReferralAccumulation(commands.Cog):
+class ReferralSystem(commands.Cog):
     """A referral system that tracks member invites and awards points."""
     
     def __init__(self, bot):
@@ -12,7 +12,7 @@ class ReferralAccumulation(commands.Cog):
         self.config = Config.get_conf(self, identifier=1234567890, force_registration=True)
         
         default_guild = {
-            "invites": {},  # {user_id: invite_code}
+            "invite_owners": {},  # {invite_code: user_id}
             "referrals": {},  # {invited_user_id: inviter_user_id}
             "points": {}  # {user_id: points}
         }
@@ -25,6 +25,12 @@ class ReferralAccumulation(commands.Cog):
         try:
             invites = await guild.invites()
             self.invite_cache[guild.id] = {inv.code: inv.uses for inv in invites}
+            
+            # Store invite owners for any new invites
+            async with self.config.guild(guild).invite_owners() as owners:
+                for inv in invites:
+                    if inv.inviter and inv.code not in owners:
+                        owners[inv.code] = inv.inviter.id
         except discord.Forbidden:
             pass
     
@@ -36,16 +42,25 @@ class ReferralAccumulation(commands.Cog):
     
     @commands.Cog.listener()
     async def on_invite_create(self, invite: discord.Invite):
-        """Update cache when invite is created."""
+        """Automatically track invite owner when invite is created."""
         if invite.guild.id not in self.invite_cache:
             self.invite_cache[invite.guild.id] = {}
         self.invite_cache[invite.guild.id][invite.code] = invite.uses
+        
+        # Automatically store who created this invite
+        if invite.inviter:
+            async with self.config.guild(invite.guild).invite_owners() as owners:
+                owners[invite.code] = invite.inviter.id
     
     @commands.Cog.listener()
     async def on_invite_delete(self, invite: discord.Invite):
         """Update cache when invite is deleted."""
         if invite.guild.id in self.invite_cache:
             self.invite_cache[invite.guild.id].pop(invite.code, None)
+        
+        # Remove from stored owners
+        async with self.config.guild(invite.guild).invite_owners() as owners:
+            owners.pop(invite.code, None)
     
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
@@ -74,14 +89,9 @@ class ReferralAccumulation(commands.Cog):
         self.invite_cache[guild.id] = {inv.code: inv.uses for inv in new_invites}
         
         if used_invite:
-            # Check if this invite belongs to a tracked referral
-            invites_data = await self.config.guild(guild).invites()
-            inviter_id = None
-            
-            for user_id, invite_code in invites_data.items():
-                if invite_code == used_invite.code:
-                    inviter_id = int(user_id)
-                    break
+            # Get the invite owner
+            invite_owners = await self.config.guild(guild).invite_owners()
+            inviter_id = invite_owners.get(used_invite.code)
             
             if inviter_id:
                 # Store referral
@@ -92,75 +102,39 @@ class ReferralAccumulation(commands.Cog):
                 async with self.config.guild(guild).points() as points:
                     points[str(inviter_id)] = points.get(str(inviter_id), 0) + 1
     
-    @commands.command(name="referral")
+    @commands.command(name="myinvites")
     @commands.guild_only()
-    async def create_referral(self, ctx, max_uses: Optional[int] = 0, max_age: Optional[int] = 0):
-        """Create a referral invite link.
+    async def my_invites(self, ctx):
+        """View all your tracked invites."""
+        invite_owners = await self.config.guild(ctx.guild).invite_owners()
         
-        Parameters:
-        - max_uses: Maximum number of uses (0 = unlimited)
-        - max_age: Maximum age in seconds (0 = unlimited)
+        my_invites = [code for code, user_id in invite_owners.items() if user_id == ctx.author.id]
         
-        Example: `[p]referral 10 86400` creates an invite with 10 uses valid for 24 hours.
-        """
-        # Delete previous invites
-        invites_data = await self.config.guild(ctx.guild).invites()
-        old_invite_code = invites_data.get(str(ctx.author.id))
-        
-        if old_invite_code:
-            try:
-                invites = await ctx.guild.invites()
-                for invite in invites:
-                    if invite.code == old_invite_code:
-                        await invite.delete(reason="User creating new referral invite")
-                        break
-            except discord.Forbidden:
-                pass
-        
-        # Create new invite
-        try:
-            invite = await ctx.channel.create_invite(
-                max_uses=max_uses,
-                max_age=max_age,
-                unique=True,
-                reason=f"Referral invite for {ctx.author}"
-            )
-        except discord.Forbidden:
-            await ctx.send("❌ I don't have permission to create invites in this channel.")
+        if not my_invites:
+            await ctx.send("📭 You don't have any active invites. Create one through Discord and it will be automatically tracked!")
             return
         
-        # Store invite
-        async with self.config.guild(ctx.guild).invites() as invites_data:
-            invites_data[str(ctx.author.id)] = invite.code
-        
-        # Update cache
-        await self.cache_invites(ctx.guild)
-        
-        # Send invite to user
-        embed = discord.Embed(
-            title="🔗 Your Referral Link",
-            description=f"Share this link to invite people and earn points!\n\n{invite.url}",
-            color=discord.Color.green()
-        )
-        
-        details = []
-        if max_uses > 0:
-            details.append(f"**Max Uses:** {max_uses}")
-        else:
-            details.append("**Max Uses:** Unlimited")
-            
-        if max_age > 0:
-            details.append(f"**Expires In:** {max_age // 3600}h {(max_age % 3600) // 60}m")
-        else:
-            details.append("**Expires In:** Never")
-        
-        embed.add_field(name="Settings", value="\n".join(details), inline=False)
-        
         try:
-            await ctx.author.send(embed=embed)
-            await ctx.send("✅ Your referral link has been sent to your DMs!")
-        except discord.Forbidden:
+            invites = await ctx.guild.invites()
+            invite_details = []
+            
+            for inv in invites:
+                if inv.code in my_invites:
+                    uses = inv.uses
+                    max_uses = inv.max_uses if inv.max_uses else "∞"
+                    expires = f"<t:{int(inv.expires_at.timestamp())}:R>" if inv.expires_at else "Never"
+                    invite_details.append(f"`{inv.code}` - {uses}/{max_uses} uses - Expires: {expires}")
+            
+            embed = discord.Embed(
+                title="📋 Your Tracked Invites",
+                description="\n".join(invite_details) if invite_details else "No active invites found.",
+                color=discord.Color.blue()
+            )
+            
             await ctx.send(embed=embed)
+            
+        except discord.Forbidden:
+            await ctx.send("❌ I don't have permission to view invites in this server.")
     
     @commands.command(name="referrals")
     @commands.guild_only()
@@ -277,5 +251,6 @@ class ReferralAccumulation(commands.Cog):
         
         await ctx.send(embed=embed)
 
+
 async def setup(bot):
-    await bot.add_cog(ReferralAccumulation(bot))
+    await bot.add_cog(ReferralSystem(bot))
