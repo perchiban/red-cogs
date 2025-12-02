@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from redbot.core import commands, Config
 from typing import Optional
 from pathlib import Path
+from redbot.core.data_manager import cog_data_path
 
 class Lottery(commands.Cog):
     """A lottery system with referral integration and result logging."""
@@ -22,7 +23,7 @@ class Lottery(commands.Cog):
         self.config.register_guild(**default_guild)
         
         # Create logs directory if it doesn't exist
-        self.logs_dir = Path.cwd() / "lottery_logs"
+        self.logs_dir = cog_data_path(self) / "lottery_logs"
         self.logs_dir.mkdir(exist_ok=True)
     
     @commands.group(name="lotteryconfig")
