@@ -137,8 +137,8 @@ class Lottery(commands.Cog):
         if use_referrals:
             referrals_per_entry = await self.config.guild(ctx.guild).referrals_per_entry()
             embed.add_field(
-                name="🎁 Bonus por referencia",
-                value=f"Oportunidades Extra: 1 ticket extra otorgado por cada {referrals_per_entry} personas invitadas DESPUES del inicio de la loteria!",
+                name="🎁 Oportunidades Extra",
+                value=f"1 ticket extra otorgado por cada {referrals_per_entry} personas invitadas DESPUES del inicio de la loteria!",
                 inline=False
             )
         
