@@ -123,36 +123,30 @@ class Lottery(commands.Cog):
         
         # Create initial embed
         embed = discord.Embed(
-            title="🎰 Lottery Registration Open!",
-            description=f"{description}\n\nReact with {emoji} below to enter!",
+            title="🎰 Sorteo Abierto!",
+            description=f"{description}\n\nReacciona con {emoji} abajo para participar!",
             color=0xF1C40F,
             timestamp=discord.utils.utcnow()
         )
         embed.add_field(
-            name="📋 How to Enter",
-            value=f"Simply react with {emoji} to this message",
+            name="📋 Como participo?",
+            value=f"Simplemente reacciona con {emoji} a este mensaje",
             inline=False
         )
         
         if use_referrals:
             referrals_per_entry = await self.config.guild(ctx.guild).referrals_per_entry()
             embed.add_field(
-                name="🎁 Referral Bonus",
-                value=f"Extra entries: 1 entry per {referrals_per_entry} referrals made AFTER this lottery started!",
+                name="🎁 Bonus por referencia",
+                value=f"Oportunidades Extra: 1 ticket extra otorgado por cada {referrals_per_entry} personas invitadas DESPUES del inicio de la loteria!",
                 inline=False
             )
         
         embed.add_field(
-            name="⏰ Drawing Time",
+            name="⏰ Finalizacion del sorteo",
             value=f"<t:{end_timestamp}:R> (<t:{end_timestamp}:F>)",
             inline=False
         )
-        embed.add_field(
-            name="🏷️ Lottery Name",
-            value=f"`{name}`",
-            inline=False
-        )
-        embed.set_footer(text=f"Started by {ctx.author} | Good luck to all participants!")
         
         # Send the lottery message
         try:
@@ -289,12 +283,12 @@ class Lottery(commands.Cog):
             if not target_reaction:
                 if not is_rerun:
                     embed = discord.Embed(
-                        title="🎰 Lottery Ended",
-                        description="No participants entered the lottery.",
+                        title="🎰 El sorteo ha finalizado!",
+                        description="Ningun participante ha entrado al sorteo.",
                         color=0xE74C3C,
                         timestamp=discord.utils.utcnow()
                     )
-                    embed.set_footer(text="Better luck next time!")
+                    embed.set_footer(text="Suerte para la proxima!")
                     await message.edit(embed=embed)
                     await self._move_to_completed(guild, lottery_name)
                 return
@@ -308,12 +302,12 @@ class Lottery(commands.Cog):
             if not participants:
                 if not is_rerun:
                     embed = discord.Embed(
-                        title="🎰 Lottery Ended",
-                        description="No valid participants entered the lottery.",
+                        title="🎰 El sorteo ha finalizado",
+                        description="Ningun participante ha entrado al sorteo.",
                         color=0xE74C3C,
                         timestamp=discord.utils.utcnow()
                     )
-                    embed.set_footer(text="Better luck next time!")
+                    embed.set_footer(text="Suerte para la proxima!")
                     await message.edit(embed=embed)
                     await self._move_to_completed(guild, lottery_name)
                 return
@@ -354,42 +348,42 @@ class Lottery(commands.Cog):
             # Create winner announcement embed
             starter = guild.get_member(lottery_data["starter_id"])
             embed = discord.Embed(
-                title="🎊 Lottery Winner Announced!" + (" (RERUN)" if is_rerun else ""),
-                description=f"**Congratulations to {winner.mention}!**\n\nYou have won the lottery!",
+                title="🎊 Ganador del sorteo!" + (" (RERUN)" if is_rerun else ""),
+                description=f"**Felicidades a {winner.mention}!**\n\nGanaste el sorteo!",
                 color=0x2ECC71 if not is_rerun else 0x3498DB,
                 timestamp=discord.utils.utcnow()
             )
             embed.add_field(
-                name="📊 Total Participants",
+                name="📊 Total de participantes",
                 value=str(len(participants)),
                 inline=True
             )
             embed.add_field(
-                name="🎟️ Total Entries",
+                name="🎟️ Total de tickets",
                 value=str(len(weighted_participants)),
                 inline=True
             )
             embed.add_field(
-                name="🏆 Winner",
+                name="🏆 Ganador",
                 value=winner.mention,
                 inline=True
             )
             embed.add_field(
-                name="🎯 Winner's Entries",
+                name="🎯 Tickets del ganador",
                 value=str(winner_entries),
                 inline=True
             )
             embed.set_thumbnail(url=winner.display_avatar.url)
             
             if starter:
-                embed.set_footer(text=f"Started by {starter} | Thank you to all participants!")
+                embed.set_footer(text=f"Empezado por {starter} | Gracias a todos los participantes!")
             
             # Edit or send message
             if is_rerun:
                 await channel.send(f"🔄 **RERUN RESULTS for '{lottery_name}'**", embed=embed)
             else:
                 await message.edit(embed=embed)
-                await channel.send(f"🎉 {winner.mention} has won the lottery!")
+                await channel.send(f"🎉 {winner.mention} ha ganado el sorteo!")
             
         except discord.NotFound:
             pass
