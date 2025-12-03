@@ -18,7 +18,8 @@ class Lottery(commands.Cog):
             "active_lotteries": {},
             "completed_lotteries": {},
             "log_channel": None,
-            "referrals_per_entry": 5  # Default: 5 referrals = 1 extra entry
+            "referrals_per_entry": 5,  # Default: 5 referrals = 1 extra entry
+            "required_rank_id": None  # Role ID that referred users must have
         }
         self.config.register_guild(**default_guild)
         
@@ -50,13 +51,29 @@ class Lottery(commands.Cog):
         await self.config.guild(ctx.guild).referrals_per_entry.set(count)
         await ctx.send(f"✅ Set to {count} referrals per extra entry.")
     
+    @lottery_config.command(name="requiredrank")
+    async def set_required_rank(self, ctx, role: Optional[discord.Role] = None):
+        """Set the required role for referrals to count (or clear it).
+        
+        Only referred users with this role will count toward bonus entries.
+        Use without a role to clear the requirement.
+        """
+        if role:
+            await self.config.guild(ctx.guild).required_rank_id.set(role.id)
+            await ctx.send(f"✅ Referrals will only count if the referred user has the {role.mention} role.")
+        else:
+            await self.config.guild(ctx.guild).required_rank_id.set(None)
+            await ctx.send("✅ Removed rank requirement. All referrals will count.")
+    
     @lottery_config.command(name="view")
     async def view_config(self, ctx):
         """View current lottery configuration."""
         log_channel_id = await self.config.guild(ctx.guild).log_channel()
         referrals_per_entry = await self.config.guild(ctx.guild).referrals_per_entry()
+        required_rank_id = await self.config.guild(ctx.guild).required_rank_id()
         
         log_channel = ctx.guild.get_channel(log_channel_id) if log_channel_id else None
+        required_rank = ctx.guild.get_role(required_rank_id) if required_rank_id else None
         
         embed = discord.Embed(
             title="⚙️ Lottery Configuration",
@@ -70,6 +87,11 @@ class Lottery(commands.Cog):
         embed.add_field(
             name="Referrals Per Entry",
             value=f"{referrals_per_entry} referrals = 1 extra entry",
+            inline=False
+        )
+        embed.add_field(
+            name="Required Rank for Referrals",
+            value=required_rank.mention if required_rank else "None (all referrals count)",
             inline=False
         )
         
@@ -147,6 +169,12 @@ class Lottery(commands.Cog):
             value=f"<t:{end_timestamp}:R> (<t:{end_timestamp}:F>)",
             inline=False
         )
+        embed.add_field(
+            name="🏷️ Lottery Name",
+            value=f"`{name}`",
+            inline=False
+        )
+        embed.set_footer(text=f"Started by {ctx.author} | Good luck to all participants!")
         
         # Send the lottery message
         try:
@@ -202,10 +230,12 @@ class Lottery(commands.Cog):
                 entries_map[user.id] = 1
             return entries_map
         
-        # Get referral data
+        # Get referral data and settings
         referral_config = referral_cog.config.guild(guild)
         referrals_data = await referral_config.referrals()
         referrals_per_entry = await self.config.guild(guild).referrals_per_entry()
+        required_rank_id = await self.config.guild(guild).required_rank_id()
+        required_rank = guild.get_role(required_rank_id) if required_rank_id else None
         
         for user in participants:
             # Base entry
@@ -220,7 +250,13 @@ class Lottery(commands.Cog):
                     if invited_member and invited_member.joined_at:
                         join_timestamp = int(invited_member.joined_at.timestamp())
                         if join_timestamp >= start_time:
-                            referral_count += 1
+                            # Check if rank requirement is met (if set)
+                            if required_rank:
+                                if required_rank in invited_member.roles:
+                                    referral_count += 1
+                            else:
+                                # No rank requirement, count all valid referrals
+                                referral_count += 1
             
             # Calculate bonus entries
             bonus_entries = referral_count // referrals_per_entry
@@ -477,6 +513,50 @@ class Lottery(commands.Cog):
         
         await ctx.send(f"🔄 Rerunning lottery '{lottery_name}'...")
         await self._execute_draw(ctx.guild, lottery_name, is_rerun=True)
+    
+    @commands.command(name="activelotteries")
+    @commands.guild_only()
+    async def active_lotteries(self, ctx):
+        """Display all currently active lotteries with detailed information."""
+        active = await self.config.guild(ctx.guild).active_lotteries()
+        
+        if not active:
+            await ctx.send("📭 There are no active lotteries at the moment.")
+            return
+        
+        embed = discord.Embed(
+            title="🎰 Active Lotteries",
+            description=f"Found {len(active)} active {'lottery' if len(active) == 1 else 'lotteries'}",
+            color=discord.Color.gold(),
+            timestamp=discord.utils.utcnow()
+        )
+        
+        for name, data in active.items():
+            channel = ctx.guild.get_channel(data["channel_id"])
+            starter = ctx.guild.get_member(data["starter_id"])
+            
+            channel_mention = channel.mention if channel else "Unknown Channel"
+            starter_name = starter.display_name if starter else "Unknown"
+            
+            time_remaining = f"<t:{data['end_time']}:R>"
+            referral_status = "✅ Enabled" if data.get("use_referrals") else "❌ Disabled"
+            
+            value_text = (
+                f"**Channel:** {channel_mention}\n"
+                f"**Started by:** {starter_name}\n"
+                f"**Ends:** {time_remaining}\n"
+                f"**Referrals:** {referral_status}\n"
+                f"**Description:** {data.get('description', 'No description')}"
+            )
+            
+            embed.add_field(
+                name=f"🎟️ {name}",
+                value=value_text,
+                inline=False
+            )
+        
+        embed.set_footer(text="Use [p]lotteryinfo <name> for more details")
+        await ctx.send(embed=embed)
     
     @commands.command(name="listlotteries")
     @commands.guild_only()
