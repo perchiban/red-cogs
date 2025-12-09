@@ -496,6 +496,24 @@ class Lottery(commands.Cog):
                 lottery_data["draw_results"] = draw_results
                 async with self.config.guild(guild).completed_lotteries() as completed:
                     completed[lottery_name] = lottery_data
+
+    @commands.command(name="forceclose")
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_guild=True)
+    async def force_close_lottery(self, ctx, lottery_name: str):
+        """Force close an active lottery and immediately draw the winner.
+        
+        This will skip any remaining time and execute the draw immediately.
+        Useful for bugged or stuck lotteries.
+        """
+        active_lotteries = await self.config.guild(ctx.guild).active_lotteries()
+        
+        if lottery_name not in active_lotteries:
+            await ctx.send(f"❌ No active lottery found with the name '{lottery_name}'.")
+            return
+        
+        await ctx.send(f"⚠️ Force closing lottery '{lottery_name}' and drawing winner now...")
+        await self._execute_draw(ctx.guild, lottery_name, is_rerun=False)
     
     @commands.command(name="rerunlottery")
     @commands.guild_only()
